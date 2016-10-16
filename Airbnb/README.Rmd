@@ -12,6 +12,7 @@ As a current resident of San Francisco, I wanted to better understand what Airbn
 2. datawrangling_analysis.Rmd: Code for data wrangling and statistical analysis  
 3. MilestoneReport.pdf: Milestone report  
 4. projectsummary_final.Rmd: Rmd file of final project summary  
-5. Presentation.pdf: Final project presentation slideshow  
+5. Capstone Project Summary.pdf: PDF file of final project summary (includes plots)
+6. Presentation.pdf: Final project presentation slideshow  
 
 
