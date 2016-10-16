@@ -1,6 +1,6 @@
 ---
 title: "Capstone Project Summary"
-output: html_document
+output: pdf_document
 ---
 
 *Springboard Foundations of Data Science*  
@@ -74,7 +74,7 @@ I used the One-Way ANOVA and correlation coefficient statistical tests to determ
 
 However, a problem I ran into was the skewed distribution of the price feature. The One-Way ANOVA test is designed for features that have a normal distribution. After creating a new feature in the dataset that takes the price feature on a log scale, the distribution appears normal.  
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 grid.arrange(
 ggplot(data=listings, aes(x = price)) + 
   geom_histogram(bins = 30) +
@@ -120,7 +120,7 @@ Similarly, the features: bathrooms, beds, bedrooms, and bed_type are likely very
 
 The below scatterplot helps to confirm that we are not overfitting the model and there is little correlation between review_scores_rating/number_of_reviews and bathrooms/accommodates:    
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 # Correlation tests of  similar features
 cor.test(listings$review_scores_rating, listings$number_of_reviews)
 cor.test(listings$accommodates, listings$bathrooms)
@@ -157,7 +157,7 @@ The random forest model is averaging multiple decision trees that are trained on
 
 After feature engineering, the final iteration generates an r-squared value of 0.6330219 with a training size of 6,800 rows with the following features:  
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 ### Random Forest Model
 # set the seed to make your partition reproducible
 set.seed(123)
@@ -213,7 +213,7 @@ Because the dataset I am working with is quite small, the next step is to determ
 
 #### Random Forest Model Boosting: K-Fold and Grid Search Cross Validation  
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 # ensure results are repeatable
 set.seed(123)
 inTraining <- createDataPartition(listings$log_price, p = .8, list = FALSE)
@@ -260,7 +260,7 @@ rsq <- 1-sum((actual-predicted)^2)/sum((actual-mean(actual))^2)
 
 After boosting the random forest model with k-fold and grid search cross validation, the r-squared values only improve slightly for both the training and testing sets. With the base model, the r-squared value for the testing set is 0.6275013. After tuning the model, the testing set r-squared value only improves to 0.6333874. We can also see from the scatterplot that there isn't much difference.  
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 ## Scatterplot of model accuracy
 # Assign actual and predicted to testing set
 df <- data.frame(predicted)
@@ -284,7 +284,7 @@ The next machine learning method that we try is the GBM model. This model fits t
 
 #### GBM: K-Fold and Grid Search Cross Validation  
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.keep: ('all'; character)}
 # ensure results are repeatable
 set.seed(123)
 inTraining <- createDataPartition(listings$log_price, p = .8, list = FALSE)
