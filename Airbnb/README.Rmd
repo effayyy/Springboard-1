@@ -11,7 +11,7 @@ As a current resident of San Francisco, I wanted to better understand what Airbn
 1. listings_raw.csv: Raw csv file  
 2. datawrangling_analysis.Rmd: Code for data wrangling and statistical analysis  
 3. MilestoneReport.pdf: Milestone report  
-4. projectsummary_final.html: Html doc of final project summary  
+4. projectsummary_final.Rmd: Rmd file of final project summary  
 5. Presentation.pdf: Final project presentation slideshow  
 
 
