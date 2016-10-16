@@ -1,0 +1,1151 @@
+---
+title: "Statistical analysis of how Price is affected by host history and listing details"
+output: html_document
+---
+
+***
+## DATA WRANGLING
+***
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, setup}
+# Load libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gridExtra)
+library(ggthemes)
+
+# Read csv
+listings <- read.csv("~/Dropbox (Personal)/Springboard/Capstone Project/listings_raw.csv")
+
+```
+
+## Remove irrelevant or repetitive data
+
+```{r}
+# Because booking history data is not available, I will not be using the calendar data for this analysis.
+listings$scrape_id <- NULL
+listings$listing_url <- NULL
+listings$host_name <- NULL
+listings$latitude <- NULL
+listings$longitude <- NULL
+listings$calendar_last_scraped <- NULL
+listings$host_url <- NULL
+listings$neighbourhood_group_cleansed <- NULL
+listings$market <- NULL
+listings$neighbourhood <- NULL
+listings$host_neighbourhood <- NULL
+listings$country <- NULL
+listings$jurisdiction_names <- NULL
+listings$host_location <- NULL
+listings$smart_location <- NULL
+listings$is_location_exact <- NULL
+
+# I will not be doing an analysis on photographs uploaded
+listings$thumbnail_url <- NULL
+listings$medium_url <- NULL
+listings$picture_url <- NULL
+listings$xl_picture_url <- NULL
+listings$host_thumbnail_url <- NULL
+listings$host_picture_url <- NULL
+
+# Because booking history data is not available, I will not be using the calendar data for this analysis.
+listings$calendar_updated <- NULL
+listings$availability_30 <- NULL
+listings$availability_60 <- NULL
+listings$availability_90 <- NULL
+listings$availability_365 <- NULL
+
+# Checking other items
+summary(listings$square_feet)
+# There are too many NAs (98%) to do a proper analysis. Remove this.
+listings$square_feet <- NULL
+
+summary(listings$require_guest_profile_picture)
+# Keep this to see if requiring/not requiring guest profile picture increases or decreases listing price
+summary(listings$require_guest_phone_verification)
+# Keep this to see if requiring/not requiring guest phone verification increases or decreases listing price
+summary(listings$experiences_offered)
+# There is no data in this feature. Remove.
+listings$experiences_offered <- NULL
+summary(listings$has_availability)
+# There is no data at all in this feature. Remove.
+listings$has_availability <- NULL
+
+#summary(listings$license)
+# There are many levels - 862. This is only about 10% of the data. Keep for now and convert into binary column if I need more features for predictive modeling.
+
+# Because we know this is a study on San Francisco Airbnb listings, we can remove city, state, and country_code columns.
+listings$city <- NULL
+listings$state <- NULL
+listings$country_code <- NULL
+```
+
+## Clean date features by converting them from factor to date
+
+```{r}
+## HOST_SINCE
+str(listings$host_since)
+summary(listings$host_since)
+listings$host_since <- as.Date(listings$host_since, "%Y-%m-%d")
+## Median of host_since
+summary(listings$host_since) # there are two NAs
+median(listings$host_since, na.rm=TRUE)
+## Replace NAs in first_review with median: 2013-10-03
+listings$host_since[is.na(listings$host_since)] <- median(listings$host_since, na.rm=TRUE)
+## Calculate time difference between host_since and last_scraped
+str(listings$last_scraped)
+listings$last_scraped <- as.Date(listings$last_scraped, "%Y-%m-%d")
+listings$host_time <- listings$last_scraped - listings$host_since
+
+
+## FIRST_REVIEW
+str(listings$first_review)
+listings$first_review <- as.Date(listings$first_review, "%Y-%m-%d")
+## Median of last_review
+summary(listings$first_review)
+median(listings$first_review, na.rm=TRUE)
+## Replace NAs in first_review with median: 2015-07-29
+listings$first_review[is.na(listings$first_review)] <- median(listings$first_review, na.rm=TRUE)
+
+## LAST_REVIEW
+str(listings$last_review)
+listings$last_review <- as.Date(listings$last_review, "%Y-%m-%d")
+## Median of last_review
+median(listings$last_review, na.rm=TRUE)
+## Replace NAs in last_review with median: 2016-06-06
+listings$last_review[is.na(listings$last_review)] <- median(listings$last_review, na.rm=TRUE)
+
+## Calculate time difference between first_review and last_review
+listings$review_diff <- listings$last_review - listings$first_review
+```
+
+## Clean features related to price 
+
+```{r}
+## PRICE
+# Remove $ and , from price
+listings$price <- gsub("[$,]", "", listings$price)
+# Remove .00 from price
+listings$price <- gsub("\\.00", "", listings$price)
+# Convert price from character to numeric
+listings$price <- as.numeric(listings$price)
+# Summary of price
+summary(listings$price) 
+#there are no nulls
+
+
+## WEEKLY_PRICE
+# Remove $ and , from weekly_price
+listings$weekly_price <- gsub("[$,]", "", listings$weekly_price)
+# Remove .00 from weekly_price
+listings$weekly_price <- gsub("\\.00", "", listings$weekly_price)
+# Convert weekly_price from character to numeric
+listings$weekly_price <- as.numeric(listings$weekly_price)
+# Summary of weekly_price
+summary(listings$weekly_price)
+# Nearly 70% of the dataset has NA for weekly_price. Remove this feature.
+listings$weekly_price <- NULL
+
+
+## MONTHLY_PRICE
+# Remove $ and , from monthly_price
+listings$monthly_price <- gsub("[$,]", "", listings$monthly_price)
+# Remove .00 from monthly_price
+listings$monthly_price <- gsub("\\.00", "", listings$monthly_price)
+# Convert weekly_price from character to numeric
+listings$monthly_price <- as.numeric(listings$monthly_price)
+# Summary of monthly_price
+summary(listings$monthly_price)
+# Nearly 80% of the dataset has NA for monthly_price. Remove this feature.
+listings$monthly_price <- NULL
+
+
+## SECURITY_DEPOSIT
+# Remove $ and , from security_deposit
+listings$security_deposit <- gsub("[$,]", "", listings$security_deposit)
+# Remove .00 from security_deposit
+listings$security_deposit <- gsub("\\.00", "", listings$security_deposit)
+# Convert security_deposit from character to numeric
+listings$security_deposit <- as.numeric(listings$security_deposit)
+# Summary of security_deposit
+summary(listings$security_deposit)
+# >50% of dataset have NA for security deposit. Remove this features.
+listings$security_deposit <- NULL
+
+
+## CLEANING_FEE
+# Remove $ and , from cleaning_fee
+listings$cleaning_fee <- gsub("[$,]", "", listings$cleaning_fee)
+# Remove .00 from cleaning_fee
+listings$cleaning_fee <- gsub("\\.00", "", listings$cleaning_fee)
+# Convert cleaning_fee from character to numeric
+listings$cleaning_fee <- as.numeric(listings$cleaning_fee)
+# Summary of cleaning_fee
+summary(listings$cleaning_fee)
+# ~28% of the dataset has NA value for cleaning_fee. We can keep this.
+# Median of cleaning_fee
+median(listings$cleaning_fee, na.rm=TRUE)
+## Replace NAs in cleaning_fee with median: 65
+listings$cleaning_fee[is.na(listings$cleaning_fee)] <- median(listings$cleaning_fee, na.rm=TRUE)
+
+
+## EXTRA_PEOPLE
+# Remove $ and , from extra_people
+listings$extra_people <- gsub("[$,]", "", listings$extra_people)
+# Remove .00 from extra_people
+listings$extra_people <- gsub("\\.00", "", listings$extra_people)
+# Convert extra_people from character to numeric
+listings$extra_people <- as.numeric(listings$extra_people)
+# Summary of extra_people
+summary(listings$extra_people)
+```
+
+## Clean features with symbols 
+
+```{r}
+# Remove % from host_response_rate
+listings$host_response_rate <- gsub("[%]", "", listings$host_response_rate)
+# Convert host_response_rate from character to numeric
+listings$host_response_rate <- as.numeric(listings$host_response_rate)
+# Check summary
+summary(listings$host_response_rate)
+# ~25% of data is NA for host_resonse_rate
+# Median of cleaning_fee
+median(listings$host_response_rate, na.rm=TRUE)
+## Replace NAs in cleaning_fee with median: 100
+listings$host_response_rate[is.na(listings$host_response_rate)] <- median(listings$host_response_rate, na.rm=TRUE)
+
+
+## HOST_ACCEPTANCE_RATE
+# Remove % from host_acceptance_rate
+listings$host_acceptance_rate <- gsub("[%]", "", listings$host_acceptance_rate)
+# Feature is a character. Convert to numeric
+listings$host_acceptance_rate <- as.numeric(listings$host_acceptance_rate)
+# Check summary of host_acceptance_rate
+summary(listings$host_acceptance_rate)
+# ~27% of dataset has NA for host_acceptance_rate
+# Median of cleaning_fee
+median(listings$host_acceptance_rate, na.rm=TRUE)
+## Replace NAs in host_acceptance_rate with median: 100
+listings$host_acceptance_rate[is.na(listings$host_acceptance_rate)] <- median(listings$host_acceptance_rate, na.rm=TRUE)
+
+```
+
+## Remove outlier prices
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, remove_outlier_prices}
+## Examine the listings that are $10k/night
+#listings[grep("10000", listings$price), ]
+## They are Airbnb interns or hacked accounts. Remove these observations.
+listings <- listings[!grepl("10000", listings$price),]
+
+## Examine the listings that are $8888/night
+#listings[grep("8888", listings$price), ]
+## This is another test account. Remove.
+listings <- listings[!grepl("8888", listings$price),]
+
+## Examine the $10 listings
+#listings[ which(listings$price == 10),]
+## Listings for luggage storage no longer available. Remove.
+listings <- listings[!(listings$price=="10"),]
+
+## Examine listings <= $50
+price_subset <- subset(listings, price<51)
+# Move price column forward
+col_idx <- grep("price", names(price_subset))
+price_subset <- price_subset[, c(col_idx, (1:ncol(price_subset))[-col_idx])]
+#View(price_subset)
+# Listings <= $50 look ok. Do not remove.
+```
+
+## Remove test listings
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, remove_test_listings}
+## Locate test listings
+listings[grep("test", listings$name), ]
+listings[grep("title", listings$summary), ]
+listings[grep("<", listings$name), ]
+listings[grep("don't book", listings$name), ]
+
+## Remove these listings
+listings<-listings[-c(grep("test", listings$name)), ]
+listings<-listings[-c(grep("<", listings$name)), ]
+listings<-listings[-c(grep("lalsldf", listings$name)), ]
+listings<-listings[-c(grep("don't book", listings$name)), ]
+```
+
+## Clean property_type  
+
+In looking at unique(listings$property_type), there are too many levels, some of which don't make sense. Let's take a deeper look into some of the categories.
+
+``` {r echo=FALSE, message=FALSE, warning=FALSE, clean_property_type}
+## Examine Castle
+listings[grep("Castle", listings$property_type), ]
+# Castle looks to be legitimate. Keep.
+
+## Examine Cave
+listings[grep("Cave", listings$property_type), ]
+# Listing appears to be an actual home, not a cave. Rename to Apartment.
+listings$property_type <- str_replace(listings$property_type, "Cave", "Apartment")
+
+## Examine Lighthouse
+listings[grep("Lighthouse", listings$property_type), ]
+## This is an apartment. Rename to "Apartment."
+listings$property_type <- str_replace(listings$property_type, "Lighthouse", "Apartment")
+
+## Examine Tent
+listings[grep("Tent", listings$property_type), ]
+# Listing 4286391 is for you to pitch a tent. Keep.
+# Listing 7026597 should be updated to "House" - host has updated profile.
+# Even though one of the two observations are valid, because there are only two values, we can remove them.
+listings <- listings[-c(grep("Tent", listings$property_type)), ]
+
+## Examine Yurt
+listings[grep("Yurt", listings$property_type), ]
+# There are two listings, one of which is no longer valid and the other is not a yurt. Remove.
+listings<-listings[-c(grep("Yurt", listings$property_type)), ]
+
+## Examine Treehouse
+listings[grep("Treehouse", listings$property_type), ]
+# id 3481025 is a House and id 145886 is a loft
+# Rename them to House
+listings$property_type <- str_replace(listings$property_type, "Treehouse", "House")
+
+## Examine Villa
+listings[grep("Villa", listings$property_type), ]
+# Two listings are hotel rooms and the rest have been removed. Remove this variable.
+listings<-listings[-c(grep("Villa", listings$property_type)), ]
+
+## Examine Bungalow
+listings[grep("Bungalow", listings$property_type), ]
+# Looks ok - keep.
+
+## Examine Boat
+listings[grep("Boat", listings$property_type), ]
+# Based on the description these are private yachts or boats - keep.
+
+## Examine Other
+listings[grep("Other", listings$property_type), ]
+# There are 75 observations. That is a small enough amount to leave as is.
+```
+
+## Clean Host Airbnb History:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, host_history}
+# Examine host_listings_count and host_total_listings_count
+ifelse(listings$host_listings_count==listings$host_total_listings_count,0)
+summary(listings$host_listings_count)
+summary(listings$host_total_listings_count)
+
+# The two columns appear to be the same data other than two null values in host_listings_count
+# Remove host_total_listings_count
+listings$host_total_listings_count <- NULL
+
+# Summary of host_listings_count
+summary(listings$host_listings_count)
+# Convert from integer to numeric
+listings$host_listings_count <- as.numeric(listings$host_listings_count)
+# Median of host_listings_count
+median(listings$host_listings_count, na.rm=TRUE)
+## Replace NAs in host_listings_count with median: 1
+listings$host_listings_count[is.na(listings$host_listings_count)] <- median(listings$host_listings_count, na.rm=TRUE)
+
+
+# Compare host_listings_count and calculated_host_listings_count
+ifelse(listings$host_listings_count==listings$calculated_host_listings_count,1,ifelse(listings$host_listings_count!=listings$calculated_host_listings_count,0,NA))
+
+# Because host_verifications and host_identity_verified are very similar, remove host_verifications which include the types of verifications the host has done
+listings$host_verifications <- NULL
+
+```
+
+## Clean listing ratings and review scores to price
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, listing_ratings}
+## NUMBER_OF_REVIEWS
+#Check number_of_reviews structure
+str(listings$number_of_reviews)
+# Summary of number_of_reviews
+summary(listings$number_of_reviews)
+
+
+## EXAMINE REVIEWS_PER_MONTH
+# Check structure and summary of reviews_per_month
+str(listings$reviews_per_month)
+summary(listings$reviews_per_month)
+# ~26% are NA
+# Median of reviews_per_month
+median(listings$reviews_per_month, na.rm=TRUE)
+## Replace NAs in reviews_per_month with median: 1.01
+listings$reviews_per_month[is.na(listings$reviews_per_month)] <- median(listings$reviews_per_month, na.rm=TRUE)
+
+
+## REVIEW_SCORES_RATING
+# Summary of review_scores_rating
+summary(listings$review_scores_rating)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_rating[is.na(listings$review_scores_rating)] <- 0
+
+
+## REVIEW_SCORES_ACCURACY
+# Summary of review_scores_accuracy
+summary(listings$review_scores_accuracy)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_accuracy[is.na(listings$review_scores_accuracy)] <- 0
+
+
+## REVIEW_SCORES_CLEANLINESS
+# Summary of review_scores_cleanliness
+summary(listings$review_scores_cleanliness)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_cleanliness[is.na(listings$review_scores_cleanliness)] <- 0
+
+
+## REVIEW_SCORES_CHECKIN
+# Summary of review_scores_checkin
+summary(listings$review_scores_checkin)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_checkin[is.na(listings$review_scores_checkin)] <- 0
+
+
+## REVIEW_SCORES_COMMUNICATION
+# Summary of review_scores_communication
+summary(listings$review_scores_communication)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_communication[is.na(listings$review_scores_communication)] <- 0
+
+## REVIEW_SCORES_LOCATION
+# Summary of review_scores_location
+summary(listings$review_scores_location)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_location[is.na(listings$review_scores_location)] <- 0
+
+
+## REVIEW_SCORES_VALUE
+# Summary of review_scores_value
+summary(listings$review_scores_value)
+# ~27% are NA
+# Replace NA values with 0
+listings$review_scores_value[is.na(listings$review_scores_value)] <- 0
+
+# As we saw earlier, license has too many levels. Create a binary column with dummy variables
+# Convert existing data to binary column with dummy variables
+#convert all values to lowercase
+listings$license <- tolower(listings$license)
+# Convert column to binary column with true and false
+listings$has_license <- sub("^$", "false", listings$license)
+listings$has_license[listings$has_license != "false"] <- "true"
+# Check that has_license is correctly created
+#unique(listings$has_license)
+# Remove license column
+listings$license <- NULL
+```
+
+## Save final csv file
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Export listings.csv file
+write.csv(listings, file = "listings_clean.csv")
+```
+
+***
+## STATISTICAL ANALYSIS  
+***
+
+## Examine price
+```{r echo=FALSE, message=FALSE, warning=FALSE, price1}
+summary(listings$price)
+
+# Mean of price
+mean(listings$price, na.rm = TRUE)
+
+# Range of price
+range(listings$price, na.rm = TRUE)
+
+# Median of price
+median(listings$price)
+
+# Plot price with boxplot and histogram
+grid.arrange(ggplot(data=listings, aes(x = 1, y = price)) + 
+                   geom_boxplot( ),
+             ggplot(data=listings, aes(x = price)) + 
+                   geom_histogram(bins = 30) +
+               theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)), ncol=2) 
+
+# You can see this is not a normal distribution. Plot price with boxplot and histogram on a log scale instead:
+grid.arrange(ggplot(data=listings, aes(x = 1, y = price)) + 
+               geom_boxplot( ) + 
+               scale_y_log10(),
+             ggplot(data=listings, aes(x = price)) + 
+                   geom_histogram(bins = 30) +
+               scale_x_log10(), ncol=2)
+
+# With a log scale, the distribution is appears to be more normal.
+```
+
+## Examine neighbourhood_cleansed  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, neighbourhood_cleansed1}
+# Identify the number of neighborhoods
+length(unique(listings$neighbourhood_cleansed))
+
+# Plot the listing neighborhoods from most to least popular SF listings - regular scale
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+}
+ggplot(listings, aes(reorder_size(neighbourhood_cleansed))) + 
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  labs(title="Distribution of Airbnb Listings by San Francisco Neighborhoods", x="Name of Neighborhood", y="# of Listings")
+
+# Reorder from most to least popular SF listings using the log scale
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+}
+ggplot(listings, aes(reorder_size(neighbourhood_cleansed))) + 
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  scale_y_log10() +
+  labs(title="Distribution of Airbnb Listings by San Francisco Neighborhoods", x="Name of Neighborhood", y="# of Listings")
+
+# linear model test of price and neighbourhood_cleansed
+summary(lm(price ~ neighbourhood_cleansed, data = listings))
+# Because the result is not a regular distribution, we want to do take the log of price for a more regular distribution, as we saw in the plot of price using a log scale.
+
+listings$log_price <- log(listings$price)
+summary(lm(log_price ~ neighbourhood_cleansed, data = listings))
+
+# We see now that there are more neighborhoods that are statistically significant. Crocker Amazon, Diamond Heights, Excelsior, Golden Gate Park, Outer Mission, Outer Richmond, Outer Sunset, Treasure Island, Visitacion Valley are not significant.
+
+# Create new column to indicate statistically significant neighborhoods
+listings$neighborhood_is_sig <- ifelse(listings$neighbourhood_cleansed == "Crocker Amazon"|
+                    listings$neighbourhood_cleansed == "Diamond Heights" |
+                    listings$neighbourhood_cleansed == "Excelsior" |
+                     listings$neighbourhood_cleansed == "Golden Gate Park" |
+                      listings$neighbourhood_cleansed == "Outer Mission" |
+                      listings$neighbourhood_cleansed == "Outer Richmond" |
+                      listings$neighbourhood_cleansed == "Outer Sunset" |
+                      listings$neighbourhood_cleansed == "Treasure Island/YBI" |
+                      listings$neighbourhood_cleansed == "Visitacion Valley", 0, 1)
+
+# New barplot with the statistically significant neighborhoods highlighted:
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+}
+ggplot(listings, aes(reorder_size(neighbourhood_cleansed), fill=neighborhood_is_sig)) + 
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  scale_y_log10() +
+  labs(title="Distribution of Airbnb Listings by San Francisco Neighborhoods", x="Name of Neighborhood", y="# of Listings")
+```
+
+## Examining neighborhood vs price
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, neighborhood_vs_price1}
+# Boxplot of neighborhood against price - regular scale
+ggplot(listings, aes(x=reorder_size(neighbourhood_cleansed), y=price)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  geom_boxplot() +
+  labs(title="Distribution of Price per Neighborhood", x="Name of Neighborhood", y="Price") 
+
+# Boxplot of neighborhood against price with mean marked - log scale
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+}
+ggplot(listings, aes(x=reorder_size(neighbourhood_cleansed), y=price)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price per Neighborhood", x="Name of Neighborhood", y="Price") +
+  stat_summary(fun.y = "mean", 
+               geom = "point", 
+               color = "red", 
+               shape = 4, 
+               size = 4)
+```
+
+## Examine listing details
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## ROOM_TYPE
+summary(listings$room_type)
+
+# Confirm statistical significance of room_type
+summary(lm(log_price ~ room_type, data = listings))
+
+# Examine shared rooms to total listing percentage
+NROW(listings)
+
+# There are 8590 total lines in this dataset.
+#470/8590 = 0.05471478 -> 5.47% total listings are of renting a shared room.
+
+# Examine total number of entire places listed
+NROW(listings[grep("Private room", listings$room_type), ])
+# There are 3,170 listings where you can rent the entire apartment.
+# 3170/8590 = 0.3690338 -> 36.90% of total listings are of renting a private room.
+
+# Examine total number of entire places listed
+NROW(listings[grep("Entire home/apt", listings$room_type), ])
+# There are 4,950 listings where you can rent the entire apartment.
+# 4950/8590 = 0.5762515 -> 57.63% of total listings are renting an entire apartment.
+
+# Boxplot and barplot of room_type to price with mean marked
+grid.arrange(ggplot(listings, aes(room_type)) + 
+               geom_bar() + 
+               theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Distribution of Room Types", x="Type of Room", y="Count"),
+ggplot(listings, aes(x=room_type, y=price)) + 
+  geom_boxplot(alpha = 0.2) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Distribution of Room Types to Price", x="Type of Room", y="Price") +
+  scale_y_log10(), ncol=2)
+
+# Boxplot and bar chart of neighborhood to price with respect to room_type
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+}
+ggplot(listings, aes(x=reorder_size(neighbourhood_cleansed), 
+                     y = price, 
+                     fill=room_type)) + 
+  geom_boxplot(alpha=0.5)+
+  scale_y_log10() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Distribution of Price Per Room Type", x="Neighborhood", y="Price")
+
+
+## ACCOMMODATES
+# Confirm statistical significance of accommodates
+summary(lm(log_price ~ factor(accommodates), data = listings))
+
+# Bar graph of accommodates - normal scale
+ggplot(data=listings, aes(x = accommodates)) +
+  geom_bar() +
+  labs(title="Distribution of Airbnb Listings by Room Accomodation", x="# People Host Can Accomodate", y="# of Listings")
+
+# Examining accommodation sizes 1 through 6
+# Examine accommodation size: 1
+NROW(listings[grep("1", listings$accommodates), ])
+# 1143/8590 = 0.1330617
+
+# Examine accommodation size: 2
+NROW(listings[grep("2", listings$accommodates), ])
+# 3672/8590 = 0.4274738
+
+# Examine accommodation size: 3
+NROW(listings[grep("3", listings$accommodates), ])
+# 723/8590 = .08416764
+
+# Examine accommodation size: 4
+NROW(listings[grep("4", listings$accommodates), ])
+# 1665/8590 = 0.19383
+
+# Examine accommodation size: 5
+NROW(listings[grep("5", listings$accommodates), ])
+# 400/8590 = 0.04656577
+
+# Examine accommodation size: 6
+NROW(listings[grep("6", listings$accommodates), ])
+# 684/8590 = 0.07962747
+# Accommodation size of 1 to 6 persons makes up approximately 96% of total listings
+
+# Bar graph of accommodates - log scale
+ggplot(data=listings, aes(x = accommodates)) +
+  geom_bar() +
+  scale_y_log10() +
+  labs(title="Distribution of Airbnb Listings by Room Accomodation", x="# People Host Can Accomodate", y="# of Listings")
+
+# Box plot of accommodates to price
+ggplot(listings, aes(x=factor(accommodates), y=price)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Listing Accommodation Size", x="# People Host can Accommodate", y="Listing Price")
+
+
+## PROPERTY_TYPE
+# Barplot and boxplot of property_type to price - log scale
+ggplot(listings, aes(x=reorder(property_type, property_type, function(x) -length(x)))) + 
+  geom_bar() +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title="Distribution of Property Types", x="Type of Property", y="Count")
+
+ggplot(listings, aes(x=reorder(property_type, property_type, function(x) -length(x)), y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title="Distribution of Price to Property Types", x="Type of Property", y="Price")
+
+# Based on boxplot of property_type to price, you can see that "Dorm" has the lowest average listing price. Let's take a look at the number of listings for Dorm.
+
+NROW(listings[grep("Dorm", listings$property_type), ])
+
+# Confirm statistical significance of property_type
+summary(lm(log_price ~ property_type, data = listings))
+# A p-value of < 2.2e-16 is significant, but the individual categories are not significant. In looking at Dorm, you can see that the p value is almost zero at 0.120.
+
+# Convert property_type data to binary for is_dorm and check statistical significance
+listings$is_dorm <- ifelse((listings$property_type == "Dorm"), 1, 0)
+
+# Check proper assignment of binary column
+#NROW(listings[grep("1", listings$is_dorm), ])
+
+# Confirm statistical significance of is_dorm to price
+summary(lm(log_price ~ is_dorm, data = listings))
+
+
+## REQUIRES_LICENSE
+#summary(listings$requires_license)
+
+# Test for significance
+summary(lm(log_price ~ requires_license, data = listings))
+# The p-value is 5.949e-05, which is statistically significant. We can keep this, but need to figure out what requires_license means. This feature may end up being removed due to lack of explanation of what this feature signifies.
+
+# Boxplot to better visualize significance of requires_license to price
+ggplot(listings, aes(x=requires_license, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price for License Required", x="License Required", y="Price")
+# Even though there is a statistical significance for The price difference is small, so it's likely there is not a big affect in the price.
+
+## LICENSE
+#summary(listings$license)
+
+# Only about 10% of listings have an actual license number provided. 
+summary(lm(log_price ~ has_license, data = listings))
+# With a p-value of 0.287, we can conclude that there is very little statistical significance if a listing has a license or not.
+
+# Confirm with boxplot
+ggplot(listings, aes(x=has_license, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10()
+# has_license feature can be removed
+listings$has_license <- NULL
+#This feature can be removed from the dataset as it has no statistical significance to influencing the listing price.
+
+
+## INSTANT_BOOKABLE
+# Examine the statistical significance of instant_bookable to log_price
+summary(lm(log_price ~ instant_bookable, data = listings))
+# The p-value is 2.371e-12, which is significant. Keep this feature to predictive modeling.
+
+# Boxplot of instant_bookable to price
+ggplot(listings, aes(x=instant_bookable, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Instant Bookable", x="Listing is Instant Bookable", y="Price")
+# Even though the ANOVA test shows that instant_bookable is statistically significant, visually with the boxplot we can see that the difference in the price is almost non-existent. This likely will not affect the pric. We can examine further when creating a predictive model.
+
+
+## BATHROOMS
+# Summary of bathrooms
+summary(listings$bathrooms)
+# Only 0.5% of listings have NA for bathrooms
+# Median of bathrooms
+median(listings$bathrooms, na.rm=TRUE)
+## Replace NAs in bathrooms with median: 1
+listings$bathrooms[is.na(listings$bathrooms)] <- median(listings$bathrooms, na.rm=TRUE)
+
+# statistical significance of bathrooms
+summary(lm(log_price ~ factor(bathrooms), data = listings))
+
+# Boxplot to visually see significance
+ggplot(listings, aes(x=factor(bathrooms), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Number of Bathrooms", x="# of Bathrooms", y="Price")
+
+
+## BEDROOMS
+# Summary of bedrooms
+summary(listings$bedrooms)
+
+# Median of bedrooms
+median(listings$bedrooms, na.rm=TRUE)
+# Replace NAs in bedrooms with median: 1
+listings$bedrooms[is.na(listings$bedrooms)] <- median(listings$bedrooms, na.rm=TRUE)
+
+# Examine statistical significance of bedrooms
+summary(lm(log_price ~ factor(bedrooms), data = listings))
+
+# Boxplot to visually see significance
+ggplot(listings, aes(x=factor(bedrooms), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Number of Bedrooms", x="# of Bedrooms", y="Price")
+
+
+## BEDS
+# Summary of beds
+summary(listings$beds)
+
+# Median of beds
+median(listings$beds, na.rm=TRUE)
+## Replace NAs in bathrooms with median: 1
+listings$beds[is.na(listings$beds)] <- median(listings$beds, na.rm=TRUE)
+
+# Examine statistical significance of bedrooms
+summary(lm(log_price ~ factor(beds), data = listings))
+# Boxplot to visually see significance
+ggplot(listings, aes(x=factor(beds), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Number of Beds", x="Beds", y="Price")
+
+
+## BED_TYPE
+# Summary of bed_type
+summary(listings$bed_type)
+# Examine statistical significance of bedrooms
+summary(lm(log_price ~ factor(bed_type), data = listings))
+# Barplot of bed_type
+ggplot(listings, aes(x=bed_type)) + 
+  geom_bar() +
+  scale_y_log10() +
+  labs(title="Distribution of Types of Beds", x="Bed Type", y="Count")
+
+# Boxplot to visually see significance between room_type and price
+ggplot(listings, aes(x=factor(bed_type), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Type of Beds", x="Bed Type", y="Price")
+```
+
+## Examine listing ratings and review scores to price
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, reviews_received}
+## REVIEW_DIFF
+# A new column was created to calculate amount of time between the first and last review.
+summary(lm(log_price ~ factor(review_diff), data = listings))
+cor.test(listings$log_price, listings$review_diff)
+# The results show that there is little correlation between log_price and review_diff. This feature can be removed.
+listings$review_diff <- NULL
+
+
+## NUMBER_OF_REVIEWS
+summary(lm(log_price ~ factor(number_of_reviews), data = listings))
+# Histogram of number_of_reviews
+ggplot(listings, aes(x=number_of_reviews, fill=room_type)) + 
+  geom_histogram(position = "dodge", binwidth = 40) +
+#  scale_y_log10() +  
+  labs(title="Distribution of Number of Reviews per Listing", x="Number of Reviews Received", y="Count")
+#Most listings have less than 50 reviews, especially if it's a listing for an entire home/apartment.
+
+# Scatterplot of number_of_reviews to price
+ggplot(listings, aes(x=number_of_reviews, y=price, color=room_type)) + 
+  geom_point(alpha=0.2) + 
+  geom_smooth(method = "lm", se = FALSE, size=1) +
+  scale_y_log10() +  
+  labs(title="Distribution of Number of Reviews per Listing to Price", x="Number of Reviews Received", y="Price")
+
+
+## REVIEWS_PER_MONTH
+# Confirm significance of reviews_per_month to log_price using ANOVA Test 
+summary(lm(log_price ~ reviews_per_month, data = listings))
+# Examine statistical significance of factor(reviews_per_month) to log_price
+summary(lm(log_price ~ factor(reviews_per_month), data = listings))
+# The p-value is statistically significanct at < 2.2e-16.
+# Test for Association/Correlation Between Paired Samples
+cor.test(listings$log_price, listings$reviews_per_month)
+# Check structure and summary of reviews_per_month
+str(listings$reviews_per_month)
+#summary(listings$reviews_per_month)
+# 26% of listings have not received a review.
+
+# Histogram of reviews_per_month
+#hist(listings$reviews_per_month[!listings$reviews_per_month==0])
+
+# Combined plot of histogram and scatterplot of reviews_per_month and price - log scale
+grid.arrange(ggplot(listings, aes(reviews_per_month, fill=room_type)) + 
+  geom_histogram(position = "dodge") +
+  scale_y_log10() + 
+  scale_x_log10() +
+  labs(title="Distribution of Reviews Per Month by Type of Room", x="Number of Reviews Per Month", y="Count"),
+             ggplot(listings, aes(x=reviews_per_month, y=price, color=room_type)) + 
+  geom_point(alpha=0.2) + 
+  geom_smooth(method = "lm", se = FALSE, size=1) +
+  scale_y_log10() + 
+  scale_x_log10() +
+  labs(title="Distribution of Reviews Per Month to Price", x="Reviews Per Month", y="Price"), ncol=1)
+
+
+## REVIEW_SCORES_RATING
+# Confirm significance of review_scores_rating to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_rating), data = listings))
+# Only the review_scores_rating of 95-100 have some statistical significance of 1%.
+# Summary of review_scores_rating
+summary(listings$review_scores_rating)
+
+# Scatterplot to better visualize significance of review_scores_rating to price
+ggplot(listings, aes(x=review_scores_rating, y=price, color=room_type)) + 
+  geom_point(alpha=0.2) +
+  scale_y_log10() +
+  geom_smooth(method = "lm", se = FALSE, size=1) +
+  labs(title="Distribution of Price to Review Scores Rating", x="Score (out of 100)", y="Price")
+# 27% of listings have NA for review_scores_rating
+
+# Barplot of review_scores_rating
+ggplot(listings, aes(review_scores_rating)) + 
+  geom_bar() +
+  scale_y_log10() +
+  labs(title="Distribution of Review Scores", x="Review Score (Out of 100)", y="Count")
+
+# Boxplot comparing review_scores_rating to price - log scale
+ggplot(listings, aes(x=factor(review_scores_rating), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  labs(title="Distribution of Price to Review Score", x="Review Score (Out of 100)", y="Price")
+
+
+## REVIEW_SCORES_ACCURACY
+summary(listings$review_scores_accuracy)
+# 27% of listings don't have an accuracy score
+# Confirm significance of review_scores_accuracy to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_accuracy), data = listings))
+# An accuracy score of 10 has a small statistical significance.
+
+# Boxplot to better visualize significance of review_scores_accuracy to price
+ggplot(listings, aes(x=factor(review_scores_accuracy), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Accuracy of Listing", x="Accuracy Score (out of 10)", y="Price")
+# Consistent with previous graphs and analyses, renting out an entire apartment allows you to price higher, regardless of your accuracy score.
+
+
+## REVIEW_SCORES_CLEANLINESS
+summary(listings$review_scores_cleanliness)
+# 27% of listings don't have a cleanliness score
+# Confirm significance of review_scores_accuracy to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_cleanliness), data = listings))
+# A cleanliness score of 10 has a small statistical significance.
+
+# Boxplot to better visualize significance of review_scores_cleanliness to price
+ggplot(listings, aes(x=factor(review_scores_cleanliness), y=price, color=room_type)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Cleanliness of Listing", x="Cleanliness Score (out of 10)", y="Price")
+# Cleanliness does not appear to be very significant as there is little variation in the median for each room_type.
+
+
+## REVIEW_SCORES_CHECKIN
+summary(listings$review_scores_checkin)
+# 27% of listings don't have a checkin score
+# Confirm significance of review_scores_checkin to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_checkin), data = listings))
+# A cleanliness score of 10 has a very small statistical significance to the price.
+
+
+## REVIEW_SCORES_COMMUNICATION
+summary(listings$review_scores_communication)
+# 27% of listings don't have a communication score
+# Confirm significance of review_scores_communication to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_communication), data = listings))
+
+# Boxplot to better visualize significance of review_scores_communication to price
+ggplot(listings, aes(x=factor(review_scores_communication), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Host's Communication Score", x="Communication Score (out of 10)", y="Price")
+# Communication score does not appear to be very significant as there is little variation in the median for each room_type.
+
+
+## REVIEW_SCORES_LOCATION
+summary(listings$review_scores_location)
+# 27% of listings don't have a location score
+# Confirm significance of review_scores_location to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_location), data = listings))
+# Boxplot to better visualize significance of review_scores_location to price
+ggplot(listings, aes(x=factor(review_scores_location), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Listing's Location", x="Location Score (out of 10)", y="Price")
+# It looks like a location score of >=6 allows you to price at roughly the same price. However, price will vary if you have a location score of <6.
+
+
+## REVIEW_SCORES_VALUE
+summary(listings$review_scores_value)
+# 27% of listings don't have a value score
+# Confirm significance of review_scores_value to log_price using ANOVA Test 
+summary(lm(log_price ~ factor(review_scores_value), data = listings))
+# Boxplot to better visualize significance of review_scores_location to price
+ggplot(listings, aes(x=factor(review_scores_value), y=price, color=room_type)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Listing's Overall Value", x="Value Score (out of 10)", y="Price")
+```
+
+
+## Understanding the hosts: How does host behavior affect the listing price?
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, host_behavior}
+## HOST_IS_SUPERHOST
+summary(listings$host_is_superhost)
+# One-way Anova Test of host_is_superhost to log_price
+summary(lm(log_price ~ host_is_superhost, data = listings))
+# p = 0.9375 - not significant
+listings$host_is_superhost <- NULL
+
+
+## HOST_TIME and HOST_SINCE
+# Examine host_time to log_price
+summary(lm(log_price ~ host_time, data = listings))
+summary(lm(log_price ~ host_since, data = listings))
+# Plot host_since to price
+ggplot(listings, aes(x = host_time, y = price)) + 
+  geom_point() + 
+  scale_y_log10()
+# The p-value is 0.01763, which is statistically significant.
+
+# Examine host_response_time to log_price
+summary(lm(log_price ~ host_response_time, data = listings))
+
+# Check visually between price and host_response_time
+ggplot(listings, aes(x = host_response_time, y = price)) + 
+  geom_boxplot() + 
+  scale_y_log10()
+# The differance between the different categories are not significant, but the average of the feature is significantly different from 0.
+
+
+## HOST_RESPONSE_RATE
+# Examine host_response_rate
+# Check host_response_rate structure
+# str(listings$host_response_rate)
+# Structure is a factor - convert to numeric.
+listings$host_response_rate <- as.numeric(listings$host_response_rate)
+
+# Anova test for statistical significance host_response_rate to log_price
+summary(lm(log_price ~ factor(host_response_rate), data = listings))
+# Correlation test to check statistical significance
+cor.test(listings$log_price, listings$host_response_rate)
+# Plot price and host_response_rate
+ggplot(listings, aes(x = factor(host_response_rate), y = price)) + 
+  geom_boxplot() + 
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(title="Distribution of Price to Host Response Rate", x="Response Rate (out of 100%)", y="Price")
+
+
+## HOST_ACCEPTANCE_RATE
+str(listings$host_acceptance_rate)
+# Examine statistical significance of host_acceptance_rate to log_price
+summary(lm(log_price ~ factor(host_acceptance_rate), data = listings))
+# p < 2.2e-16 = statistically significant - keep
+
+
+## HOST_LISTINGS_COUNT
+# Examine host_listings_count
+str(listings$host_listings_count)
+cor.test(listings$log_price, listings$host_listings_count)
+summary(lm(log_price ~ factor(host_listings_count), data = listings))
+# p-value = 2.884e-08 = statistically significant - keep
+# Significant categories are listing count of 1-17, 23-24, 29, 34, 37, 45, 57, 63, 104, 191, 557. The most listings you have, the average price decreases.
+
+
+## HOST_IDENTITY_VERIFIED
+# Examine host_identity_verified
+summary(lm(log_price ~ host_identity_verified, data = listings))
+# Does not appear to be statistically significant
+# Verify host_identify_verified is not significant to price with boxplot
+ggplot(listings, aes(x=host_identity_verified, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Host_Identity_Verified", x="Host Identity Verified", y="Price")
+# While we can see there are no differences in the boxplots, we can conclude that the differance between the different categories are not significant, but the average of the feature is significantly different from 0.
+
+
+## HOST_HAS_PROFILE_PIC
+# Examine statistical significance of host_has_profile_pic to log_price
+summary(lm(log_price ~ host_has_profile_pic, data = listings))
+# p = 0.8988 = not significant. Remove.
+listings$host_has_profile_pic <- NULL
+```
+
+## Examine booking requirements
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, maximum_nights}
+## MAXIMUM_NIGHTS
+# Summary and statistical significance
+summary(lm(log_price ~ factor(maximum_nights), data = listings))
+# p = 0.0005813
+# The maximum_nights feature has a p-value of 0.0005726, so it is statistically significant to affecting the price.
+
+
+## MINIMUM_NIGHTS 
+summary(lm(log_price ~ factor(minimum_nights), data = listings))
+# p < 2.2e-16 = statistically significant.
+#The average of the feature is significantly different from 0 and it is statistically significant for listings with a minimum_nights requirement of 1-5, 9, 14, 22-23, 25, 30, 60 nights.
+
+# Boxplot to better visualize significance
+ggplot(listings, aes(x=factor(minimum_nights), y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Minimum Required Nights to Price", x="Minimum Nights to Book", y="Price")
+
+
+## INSTANT_BOOKABLE
+summary(lm(log_price ~ factor(instant_bookable), data = listings))
+# Boxplot to better visualize significance of instant_bookable to price
+ggplot(listings, aes(x=instant_bookable, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price When the Listing can be Instantly Booked", x="Instant Bookable", y="Price")
+# The differance between the different categories are not significant, but the average of the feature is significantly different from 0. As we can see, the boxplot does not show much difference. Only around 15% of the dataset is marked as "True" for instant_bookable.
+
+
+## CANCELLATION_POLICY
+# Summary of cancellation_policy
+summary(listings$cancellation_policy)
+
+# Examine statistical significance of cancellation_policy to log_price
+summary(lm(log_price ~ cancellation_policy, data = listings))
+# p = < 2.2e-16 = significant. Keep this feature.
+
+# Boxplot to better visualize significance of cancellation_policy to price
+ggplot(listings, aes(x=cancellation_policy, y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price Based on Cancellation Policy", x="Cancellation Policy", y="Price")
+# Most hosts mark the cancellation policy from flexible to strict, and listings with a "strict" cancellation policy are priced slightly higher. There is a small but observable difference that as cancellation policy becomes more strict, the more you can price your listing.
+
+
+## REQUIRE_GUEST_PROFILE_PICTURE
+summary(listings$require_guest_profile_picture)
+#Only about 6% of listings require a guest profile picture uploaded
+
+# Examine statistical significance of require_guest_profile_picture to log_price
+summary(lm(log_price ~ require_guest_profile_picture, data = listings))
+
+# Boxplot to better visualize significance of require_guest_profile_picture to price
+ggplot(listings, aes(x=factor(require_guest_profile_picture), y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Requiring Guest Profile Picture Uploaded", x="Requires Profile Picture", y="Price")
+
+
+## REQUIRE_GUEST_PHONE_VERIFICATION
+summary(listings$require_guest_phone_verification)
+#7% of listings require phone verification
+
+# Examine statistical significance of require_guest_phone_verification to log_price
+summary(lm(log_price ~ require_guest_phone_verification, data = listings))
+# Boxplot to better visualize significance of require_guest_phone_verification to price
+ggplot(listings, aes(x=factor(require_guest_phone_verification), y=price)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(title="Distribution of Price to Requiring Airbnb User Verify Identity via Phone", x="Requires Phone Verification", y="Price")
+```
+
+## Save final csv file
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Export listings.csv file
+write.csv(listings, file = "listings_final.csv")
+```
+
