@@ -1,0 +1,17 @@
+---
+title: "Predicting San Francisco Airbnb Listing Prices"
+output: html_document
+---
+
+As a current resident of San Francisco, I wanted to better understand what Airbnb guest and host trends are due to the [on-going battle between Airbnb and the City of San Francisco](http://www.sfgate.com/bayarea/article/Prop-F-Measure-to-restrict-Airbnb-rentals-6609176.php). In the end, I decided to focus my capstone project on creating a model to predict an Airbnb listing price in San Francisco based on what the host can offer for my [Springboard Foundations of Data Science Course](https://www.springboard.com/workshops/data-science).  
+
+***
+
+**This repository contains:**  
+1. listings_raw.csv: Raw csv file  
+2. datawrangling_analysis.Rmd: Code for data wrangling and statistical analysis  
+3. MilestoneReport.pdf: Milestone report  
+4. projectsummary_final.html: Html doc of final project summary  
+5. Presentation.pdf: Final project presentation slideshow  
+
+
